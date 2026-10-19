@@ -1,0 +1,447 @@
+import sys
+import socket
+import json
+import time
+import gc
+import shutil
+import glob
+import logging
+import subprocess
+import os
+from PyQt5.QtGui import QCursor
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QListWidget, QListWidgetItem, QStackedLayout
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+
+# --- 環境判定 ---
+IS_RASPBERRY_PI = False
+try:
+    with open('/sys/firmware/devicetree/base/model', 'r') as f:
+        if 'Raspberry Pi' in f.read():
+            IS_RASPBERRY_PI = True
+except Exception:
+    pass
+
+# ネットワーク設定
+SYNC_PORT = 50055  # 親機からの受信ポート
+
+# ネットワーク共有設定
+MOUNT_POINT = "/home/pi/winshare"
+REMOTE_SHARE = "//192.168.10.253/sv-os-mp4"
+MOUNT_USER = "admin"
+MOUNT_PASS = "Nochida1"
+
+# 動画フォルダパス
+SOURCE_VIDEO_DIR = os.path.join(MOUNT_POINT, "第1製造", "注意喚起")
+LOCAL_VIDEO_DIR = "/home/pi/andon_videos"
+
+# --- Logging Setup ---
+logging.basicConfig(
+    filename='andon_sub.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+sys.excepthook = handle_exception
+
+# --- Sync Thread (子機用: 親機からの受信のみ) ---
+class SyncThread(QThread):
+    sync_received = pyqtSignal(dict)
+
+    def run(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        try:
+            sock.bind(('0.0.0.0', SYNC_PORT))
+            print(f"Listening for Main Unit on UDP {SYNC_PORT}...")
+        except Exception as e:
+            logging.error(f"Sync Bind Error: {e}")
+            return
+
+        while True:
+            try:
+                data, addr = sock.recvfrom(1024)
+                msg = json.loads(data.decode('utf-8'))
+                # 親機からのsync信号のみ処理
+                if msg.get('type') == 'sync':
+                    self.sync_received.emit(msg)
+            except Exception:
+                pass
+
+    # 送信機能は削除 (子機は送信しない)
+
+# --- Video Sync Thread ---
+class VideoSyncThread(QThread):
+    def run(self):
+        if not os.path.exists(MOUNT_POINT):
+            try:
+                os.makedirs(MOUNT_POINT, exist_ok=True)
+            except:
+                pass
+        
+        if not os.path.ismount(MOUNT_POINT):
+            try:
+                subprocess.run(
+                    ['sudo', 'mount', '-t', 'cifs', REMOTE_SHARE, MOUNT_POINT, 
+                     '-o', f'user={MOUNT_USER},password={MOUNT_PASS},vers=3.0,iocharset=utf8'],
+                    check=True, timeout=30
+                )
+            except Exception as e:
+                logging.error(f"Mount failed: {e}")
+
+        if not os.path.exists(LOCAL_VIDEO_DIR):
+            try:
+                os.makedirs(LOCAL_VIDEO_DIR, exist_ok=True)
+            except Exception:
+                return
+
+        remote_files = []
+        if os.path.exists(SOURCE_VIDEO_DIR):
+            remote_files = glob.glob(os.path.join(SOURCE_VIDEO_DIR, "*.mp4"))
+            remote_files.extend(glob.glob(os.path.join(SOURCE_VIDEO_DIR, "*.MP4")))
+        
+        if remote_files:
+            remote_filenames = {os.path.basename(f) for f in remote_files}
+            local_files = glob.glob(os.path.join(LOCAL_VIDEO_DIR, "*"))
+            for f in local_files:
+                try:
+                    if os.path.isfile(f) and os.path.basename(f) not in remote_filenames:
+                        os.remove(f)
+                except Exception:
+                    pass
+
+            for src in remote_files:
+                filename = os.path.basename(src)
+                dst = os.path.join(LOCAL_VIDEO_DIR, filename)
+                if not os.path.exists(dst):
+                    try:
+                        shutil.copy2(src, dst)
+                    except Exception:
+                        pass
+
+# --- Main Window ---
+class AndonWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Andon Sub Unit")
+        self.showFullScreen()
+        self.setStyleSheet("background-color: black; color: white;")
+
+        self.active_calls = {}
+        self.is_idle_mode = False
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        self.stack_layout = QStackedLayout(central_widget)
+
+        # Page 1: 通常画面
+        self.page_normal = QWidget()
+        layout_normal = QHBoxLayout(self.page_normal)
+
+        self.list_calling = QListWidget()
+        self.list_calling.setFocusPolicy(Qt.NoFocus)
+        layout_normal.addWidget(self.list_calling)
+
+        self.list_finished = QListWidget()
+        self.list_finished.setFocusPolicy(Qt.NoFocus)
+        layout_normal.addWidget(self.list_finished)
+        self.stack_layout.addWidget(self.page_normal)
+
+        # Page 2: 動画画面
+        self.page_video = QWidget()
+        self.page_video.setStyleSheet("background-color: black;")
+        self.stack_layout.addWidget(self.page_video)
+
+        # 子機機能の起動 (Flask, Discoveryは削除)
+        
+        # 親機からの信号受信スレッド
+        self.sync_thread = SyncThread()
+        self.sync_thread.sync_received.connect(self.handle_sync_request)
+        self.sync_thread.start()
+
+        self.keep_awake_timer = QTimer(self)
+        self.keep_awake_timer.timeout.connect(self.wake_screen)
+        self.keep_awake_timer.start(30000)
+        
+        self.idle_start_timer = QTimer(self)
+        self.idle_start_timer.setSingleShot(True)
+        self.idle_start_timer.timeout.connect(self.start_idle_mode)
+
+        self.blink_timer = QTimer(self)
+        self.blink_timer.timeout.connect(self.blink_tick)
+        self.blink_counters = {'calling': 0, 'finished': 0}
+        self.last_wake_time = 0
+        self.last_heavy_wake_time = 0
+        self.wake_process = None
+        
+        self.video_process = None
+        self.grab_timer = None
+
+        self.video_sync_thread = VideoSyncThread()
+        self.video_sync_thread.start()
+
+        self.wake_screen()
+        self.start_idle_mode()
+
+    def close_application(self, event):
+        self.close()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Q or event.text().lower() == 'q':
+            self.close()
+
+    def _process_update(self, data):
+        try:
+            machine_id = str(data.get('machine_id', 'Unknown'))
+            status = data.get('status')
+            prev_status = self.active_calls.get(machine_id)
+            status_changed = (prev_status != status)
+
+            if status == 'calling':
+                self.active_calls[machine_id] = 'calling'
+            elif status == 'finished':
+                self.active_calls[machine_id] = 'finished'
+            elif status == 'normal':
+                if machine_id in self.active_calls:
+                    del self.active_calls[machine_id]
+
+            if self.active_calls and self.is_idle_mode:
+                self.stop_idle_mode()
+
+            if status == 'calling':
+                self.wake_screen()
+                self.blink_counters['calling'] = 15
+                if not self.blink_timer.isActive():
+                    self.blink_timer.start(100)
+            elif status == 'finished':
+                self.wake_screen()
+                self.blink_counters['finished'] = 15
+                if not self.blink_timer.isActive():
+                    self.blink_timer.start(100)
+                QTimer.singleShot(30000, lambda: self.remove_finished_call(machine_id))
+
+            if self.active_calls:
+                self.idle_start_timer.stop()
+                if status_changed:
+                    self.update_display()
+            else:
+                if not self.is_idle_mode and not self.idle_start_timer.isActive():
+                    self.idle_start_timer.start(10000)
+                    self.update_display()
+            
+        except Exception as e:
+            logging.error(f"Error in process_update: {e}")
+
+    def remove_finished_call(self, machine_id):
+        if self.active_calls.get(machine_id) == 'finished':
+            del self.active_calls[machine_id]
+            self.update_display()
+            if not self.active_calls and not self.is_idle_mode:
+                self.idle_start_timer.start(10000)
+
+    def handle_sync_request(self, data):
+        """親機から信号が来た場合 -> 更新のみ"""
+        self._process_update(data)
+
+    def wake_screen(self):
+        # 前回の重いコマンドが終わっているか確認してゾンビプロセス回収
+        if self.wake_process:
+            if self.wake_process.poll() is not None:
+                self.wake_process = None
+
+        current_time = time.time()
+        if current_time - self.last_wake_time < 5.0:
+            return
+        self.last_wake_time = current_time
+
+        if IS_RASPBERRY_PI:
+            try:
+                # 1. マウスカーソルを動かす（軽量）
+                current_pos = QCursor.pos()
+                QCursor.setPos(current_pos.x() + 1, current_pos.y())
+                QApplication.processEvents()
+                QCursor.setPos(current_pos)
+
+                # 2. 重いコマンドは60秒に1回
+                if current_time - self.last_heavy_wake_time > 60.0:
+                    self.last_heavy_wake_time = current_time
+                    env = os.environ.copy()
+                    if 'DISPLAY' not in env: env['DISPLAY'] = ':0'
+                    cmd = "xdg-screensaver reset; xset s off -dpms s noblank dpms force on; vcgencmd display_power 1"
+                    # 修正: run(同期)ではなくPopen(非同期)を使う
+                    self.wake_process = subprocess.Popen(cmd, shell=True, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+    def blink_tick(self):
+        if self.blink_counters['calling'] > 0:
+            self.blink_counters['calling'] -= 1
+        if self.blink_counters['finished'] > 0:
+            self.blink_counters['finished'] -= 1
+        self.update_blink_colors()
+        if self.blink_counters['calling'] <= 0 and self.blink_counters['finished'] <= 0:
+            self.blink_timer.stop()
+            self.update_display()
+
+    def _get_blink_color(self, status):
+        color = "white"
+        if status == 'calling':
+            color = "white"
+            if self.blink_counters['calling'] > 0 and self.blink_counters['calling'] % 2 == 1:
+                color = "black"
+        elif status == 'finished':
+            color = "yellow"
+            if self.blink_counters['finished'] > 0 and self.blink_counters['finished'] % 2 == 1:
+                color = "black"
+        return color
+
+    def update_blink_colors(self):
+        if self.is_idle_mode: return
+        def update_list(list_widget, status_type):
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                m_id = item.data(Qt.UserRole)
+                if m_id and self.active_calls.get(m_id) == status_type:
+                    color = self._get_blink_color(status_type)
+                    widget = list_widget.itemWidget(item)
+                    if widget:
+                        for lbl in widget.findChildren(QLabel):
+                            fs = lbl.property("original_font_size")
+                            if fs:
+                                lbl.setStyleSheet(f"font-size: {fs}px; font-family: Arial, sans-serif; font-weight: bold; color: {color}; background-color: transparent;")
+        update_list(self.list_calling, 'calling')
+        update_list(self.list_finished, 'finished')
+
+    def start_idle_mode(self):
+        if self.active_calls: return
+        self.is_idle_mode = True
+        # 念のため、古いVLCプロセスが残っていたら強制終了させる
+        if IS_RASPBERRY_PI:
+            subprocess.run(['pkill', '-f', 'vlc'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        if self.video_process:
+            try: self.video_process.kill()
+            except: pass
+            self.video_process = None
+        
+        playlist = []
+        if os.path.exists(LOCAL_VIDEO_DIR):
+            playlist = sorted(glob.glob(os.path.join(LOCAL_VIDEO_DIR, "*.mp4")) + glob.glob(os.path.join(LOCAL_VIDEO_DIR, "*.MP4")))
+
+        if playlist:
+            try:
+                # 動画画面へ切り替え
+                self.stack_layout.setCurrentWidget(self.page_video)
+                self.page_video.show()
+                QApplication.processEvents()
+
+                env = os.environ.copy()
+                if 'DISPLAY' not in env: env['DISPLAY'] = ':0'
+                cmd = ['vlc', '-I', 'dummy', '--fullscreen', '--loop', '--no-video-title-show', '--no-osd', '--quiet',
+                       '--no-keyboard-events', '--no-mouse-events', '--file-caching=3000', '--drop-late-frames', '--skip-frames', '--disable-screensaver']
+                cmd.extend(playlist)
+                
+                # VLCをQtのウィジェットに埋め込む
+                if IS_RASPBERRY_PI:
+                    cmd.append(f'--drawable-xid={int(self.page_video.winId())}')
+
+                self.video_process = subprocess.Popen(cmd, env=env)
+                self.blink_timer.stop()
+                self.grabKeyboard()
+                return
+            except Exception:
+                pass
+
+        self.stack_layout.setCurrentWidget(self.page_normal)
+        self.list_finished.hide()
+        self.list_calling.clear()
+        self.list_finished.clear()
+        self.blink_timer.stop()
+
+    def stop_idle_mode(self):
+        self.is_idle_mode = False
+        if self.video_process:
+            try:
+                self.video_process.kill()
+                self.video_process.wait()
+            except: pass
+            self.video_process = None
+        
+        self.stack_layout.setCurrentWidget(self.page_normal)
+        self.releaseKeyboard()
+        self.list_finished.show()
+        self.idle_start_timer.stop()
+        self.activateWindow()
+        self.raise_()
+        self.showFullScreen()
+        gc.collect()
+        QApplication.processEvents()
+
+    def update_display(self):
+        if self.is_idle_mode: return
+        self.list_calling.clear()
+        self.list_finished.clear()
+        self.list_calling.setStyleSheet("background-color: black;")
+        self.list_finished.setStyleSheet("background-color: black;")
+        if not self.active_calls: return
+
+        number_size = 200
+        prefix_size = int(number_size / 4)
+        
+        for m_id, status in self.active_calls.items():
+            display_text = self._format_machine_id(m_id)
+            if status == 'calling':
+                color = self._get_blink_color('calling')
+                self._add_list_item(self.list_calling, "呼出：", display_text, color, prefix_size, number_size, user_data=m_id)
+            elif status == 'finished':
+                color = self._get_blink_color('finished')
+                self._add_list_item(self.list_finished, "終了：", display_text, color, prefix_size, number_size, user_data=m_id)
+
+    def _format_machine_id(self, m_id):
+        try:
+            id_int = int(m_id)
+            if id_int == 28:
+                return "17"
+            if 16 <= id_int <= 27:
+                return f"P-{id_int - 15}"
+        except (ValueError, TypeError):
+            pass
+        return str(m_id)
+
+    def _add_list_item(self, list_widget, prefix_text, number_text, color, p_size, n_size, user_data=None):
+        base_style = f"font-family: Arial, sans-serif; font-weight: bold; color: {color}; background-color: transparent;"
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setAlignment(Qt.AlignCenter)
+        lbl_prefix = QLabel(prefix_text)
+        lbl_prefix.setStyleSheet(f"font-size: {p_size}px; {base_style}")
+        lbl_prefix.setProperty("original_font_size", p_size)
+        lbl_num = QLabel(number_text)
+        lbl_num.setStyleSheet(f"font-size: {n_size}px; {base_style}")
+        lbl_num.setProperty("original_font_size", n_size)
+        layout.addWidget(lbl_prefix)
+        layout.addWidget(lbl_num)
+        item = QListWidgetItem()
+        item.setSizeHint(widget.sizeHint())
+        item.setData(Qt.UserRole, user_data)
+        list_widget.addItem(item)
+        list_widget.setItemWidget(item, widget)
+
+    def closeEvent(self, event):
+        self.releaseKeyboard()
+        if self.video_process:
+            try: self.video_process.kill()
+            except: pass
+        event.accept()
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    app.setOverrideCursor(Qt.BlankCursor)
+    window = AndonWindow()
+    window.show()
+    sys.exit(app.exec())
