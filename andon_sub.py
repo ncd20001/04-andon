@@ -573,18 +573,18 @@ class AndonWindow(QMainWindow):
         self.update_slogans()
 
     def update_net_status(self):
-        """親機との同期状態を反映"""
+        """親機との同期状態を反映 (未接続・待機中は赤字で警告表示)"""
         ip = get_local_ip()
         if self.last_sync_timestamp:
             elapsed = time.time() - self.last_sync_timestamp
             last_time_str = time.strftime("%H:%M:%S", time.localtime(self.last_sync_timestamp))
             if elapsed < 10:
-                sync_status = f"親機同期: 正常 ({last_time_str})"
+                sync_html = f"<span style='color: #81C784;'>親機同期: 正常 ({last_time_str})</span>"
             else:
-                sync_status = f"親機同期: 待機中 (最終 {last_time_str})"
+                sync_html = f"<span style='color: #FF5252; font-weight: bold;'>親機同期: 待機中 (最終 {last_time_str})</span>"
         else:
-            sync_status = "親機同期: 接続待機中"
-        self.lbl_status_net.setText(f"子機モード [{sync_status}]  IP: {ip}")
+            sync_html = "<span style='color: #FF5252; font-weight: bold;'>親機同期: 接続待機中</span>"
+        self.lbl_status_net.setText(f"<span style='color: #78909C;'>子機モード [</span>{sync_html}<span style='color: #78909C;'>]  IP: {ip}</span>")
 
     def _log_health_check(self):
         logging.info(f"[HealthCheck] {get_system_stats_str()} | ActiveCalls={dict(self.active_calls)} | CurrentPage={'Idle' if self.stack_layout.currentWidget() == self.page_idle else 'Andon'}")
