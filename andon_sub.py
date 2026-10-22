@@ -327,18 +327,10 @@ class AndonWindow(QMainWindow):
         layout_idle.setContentsMargins(40, 30, 40, 20)
         layout_idle.setSpacing(0)
 
-        # --- 1. 上部: 日付 & 大型デジタル時計 ---
-        self.lbl_date = QLabel()
-        self.lbl_date.setAlignment(Qt.AlignCenter)
-        self.lbl_date.setFont(QFont("Arial", 32, QFont.Bold))
-        self.lbl_date.setStyleSheet("color: #90A4AE; letter-spacing: 2px;")
-        layout_idle.addWidget(self.lbl_date)
-
-        layout_idle.addSpacing(10)
-
+        # --- 1. 上部: 大型デジタル時計 (フォントサイズ1.5倍: 130 -> 195) ---
         self.lbl_clock = QLabel()
         self.lbl_clock.setAlignment(Qt.AlignCenter)
-        self.lbl_clock.setFont(QFont("Arial", 130, QFont.Bold))
+        self.lbl_clock.setFont(QFont("Arial", 195, QFont.Bold))
         self.lbl_clock.setStyleSheet("color: #FFFFFF; font-weight: bold; letter-spacing: 4px;")
         layout_idle.addWidget(self.lbl_clock)
 
@@ -377,14 +369,14 @@ class AndonWindow(QMainWindow):
 
         layout_idle.addSpacing(15)
 
-        # --- 3. 下部: システム正常ステータス ＆ 親機同期状態 ---
+        # --- 3. 下部: 年月日表示 ＆ 親機同期状態 ---
         status_box = QHBoxLayout()
         status_box.setContentsMargins(10, 0, 10, 0)
 
-        self.lbl_status_main = QLabel("● 全ライン正常待機中 (ALL NORMAL)")
-        self.lbl_status_main.setFont(QFont("Arial", 22, QFont.Bold))
-        self.lbl_status_main.setStyleSheet("color: #00E676;")
-        status_box.addWidget(self.lbl_status_main)
+        self.lbl_date = QLabel()
+        self.lbl_date.setFont(QFont("Arial", 22, QFont.Bold))
+        self.lbl_date.setStyleSheet("color: #00E676;")
+        status_box.addWidget(self.lbl_date)
 
         status_box.addStretch(1)
 
