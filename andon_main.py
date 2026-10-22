@@ -403,15 +403,55 @@ class SpreadsheetMappingThread(QThread):
 
 # --- Main Window ---
 class AndonWindow(QMainWindow):
-    # 安全標語のプリセットリスト（現場に合わせた力強いスローガン）
-    SAFETY_SLOGANS = [
-        "ゼロ災で行こう ヨシ！",
-        "指差呼称で 安全確認",
-        "今日も一日 ご安全に",
-        "整理・整頓・清掃・清潔・躾 (5S徹底)",
-        "慣れた作業も 手順を守って安全作業",
-        "かもしれない運転・作業で 危険予知"
-    ]
+    # 安全標語（月別・日別）
+    MONTHLY_SLOGANS = {
+        1: "年始め 気持ち引き締め 安全始動",
+        2: "寒さに負けず 現場の整理 5S徹底",
+        3: "納期追う 心にブレーキ 安全第一",
+        4: "慣れた手に 初心を込めて 無災害",
+        5: "連休明け 気合を入れ直し 指差呼称",
+        6: "雨の日の 滑る足元 即清掃",
+        7: "暑さに負けぬ 喉渇く前に水分補給",
+        8: "猛暑こそ 小まめな休憩 声かけ合い",
+        9: "金型と ボルトの緩み 見逃すな",
+        10: "守るルールが 身を守る",
+        11: "かじかむ手 しっかりほぐして 確実動作",
+        12: "忙しい 年の瀬だからこそ 一呼吸",
+    }
+
+    DAILY_SLOGANS = {
+        1: "月はじめ 安全装置の 再点検",
+        2: "慣れた作業も 省く手順に 潜む罠",
+        3: "保護メガネ 耳栓・安全靴 フル装備",
+        4: "型替え時 落下の危険を ゼロにする",
+        5: "金型面 ゴミと油を 拭き取って",
+        6: "危険域 手を入れるなと 心掛け",
+        7: "重いコイル 玉掛け合図は 確実に",
+        8: "片手押し 無理な体勢 絶対禁止",
+        9: "その異音 見逃す前に まず停止",
+        10: "10日目の 気の緩みこそ 赤信号",
+        11: "いざという時すぐ押す 非常停止",
+        12: "素手で触るな 切り傷・擦り傷 未然に防ぐ",
+        13: "金型の 締め付けボルト 緩みのないこと",
+        14: "スクラップ 片付け徹底 足元クリア",
+        15: "中盤戦 深呼吸して リフレッシュ",
+        16: "動く機械に 手を出すな",
+        17: "ペダル踏み 異物乗せぬよう 足元点検",
+        18: "巻き込まれ防ぐ 袖口・裾 確認ヨシ",
+        19: "ヒヤリとした その体験を みんなで共有",
+        20: "急ぐ時こそ 焦る心に ブレーキを",
+        21: "油漏れ 滑る足元 即拭き取り",
+        22: "二人作業 声かけ合図で 呼吸を合わす",
+        23: "中腰作業 腰を落として 安全作業",
+        24: "重い金型 はみ出し・落下を 許さない",
+        25: "給油点検 機械の悲鳴を 見逃すな",
+        26: "暗い手元 ライトを当てて 視界良好",
+        27: "台車押し 曲がり角では 一旦停止",
+        28: "ぼんやり作業は 事故の元",
+        29: "慌てる手元に 危険あり 落ち着き確認",
+        30: "月締め前 使った工具の 定位置復帰",
+        31: "今日も一日 全員無事故で 仕事終え",
+    }
 
     def __init__(self):
         super().__init__()
@@ -517,11 +557,19 @@ class AndonWindow(QMainWindow):
 
         layout_idle.addSpacing(15)
 
-        self.lbl_slogan = QLabel(self.SAFETY_SLOGANS[0])
-        self.lbl_slogan.setAlignment(Qt.AlignCenter)
-        self.lbl_slogan.setFont(QFont("Arial", 54, QFont.Bold))
-        self.lbl_slogan.setStyleSheet("color: #FFD54F; letter-spacing: 3px;")
-        layout_idle.addWidget(self.lbl_slogan)
+        self.lbl_slogan_month = QLabel()
+        self.lbl_slogan_month.setAlignment(Qt.AlignCenter)
+        self.lbl_slogan_month.setFont(QFont("Arial", 36, QFont.Bold))
+        self.lbl_slogan_month.setStyleSheet("color: #FFD54F; letter-spacing: 2px;")
+        layout_idle.addWidget(self.lbl_slogan_month)
+
+        layout_idle.addSpacing(12)
+
+        self.lbl_slogan_day = QLabel()
+        self.lbl_slogan_day.setAlignment(Qt.AlignCenter)
+        self.lbl_slogan_day.setFont(QFont("Arial", 36, QFont.Bold))
+        self.lbl_slogan_day.setStyleSheet("color: #FFD54F; letter-spacing: 2px;")
+        layout_idle.addWidget(self.lbl_slogan_day)
 
         layout_idle.addStretch(1)
 
@@ -646,10 +694,24 @@ class AndonWindow(QMainWindow):
         self.lbl_date.setText(date_str)
         self.lbl_clock.setText(time_str)
 
+        if not hasattr(self, '_current_day') or self._current_day != now.day:
+            self._current_day = now.day
+            self.update_slogans(now)
+
+    def update_slogans(self, now=None):
+        """月別・日別の安全標語を更新"""
+        if now is None:
+            now = datetime.now()
+        m_slogan = self.MONTHLY_SLOGANS.get(now.month, "")
+        d_slogan = self.DAILY_SLOGANS.get(now.day, "")
+        m_num = str(now.month).translate(str.maketrans('0123456789', '０１２３４５６７８９'))
+        d_num = str(now.day).translate(str.maketrans('0123456789', '０１２３４５６７８９'))
+        self.lbl_slogan_month.setText(f"{m_num}月：{m_slogan}")
+        self.lbl_slogan_day.setText(f"{d_num}日：{d_slogan}")
+
     def rotate_slogan(self):
-        """30秒ごとに安全標語を切り替え"""
-        self.slogan_index = (self.slogan_index + 1) % len(self.SAFETY_SLOGANS)
-        self.lbl_slogan.setText(self.SAFETY_SLOGANS[self.slogan_index])
+        """安全標語を最新日付に合わせて更新"""
+        self.update_slogans()
 
     def update_net_status(self):
         """下部のネットワーク状態テキストを更新"""
