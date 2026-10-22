@@ -537,11 +537,11 @@ class AndonWindow(QMainWindow):
         layout_idle.setContentsMargins(30, 4, 30, 4)
         layout_idle.setSpacing(0)
 
-        # --- 1. 上部: 大型デジタル時計 (1.2倍: 150px) ---
+        # --- 1. 上部: 大型デジタル時計 (200px) ---
         self.lbl_clock = QLabel()
         self.lbl_clock.setAlignment(Qt.AlignCenter)
-        self.lbl_clock.setFont(QFont("Arial", 150, QFont.Bold))
-        self.lbl_clock.setStyleSheet("color: #FFFFFF; font-weight: bold; letter-spacing: 2px;")
+        self.lbl_clock.setFont(QFont("Arial", 200, QFont.Bold))
+        self.lbl_clock.setStyleSheet("color: #FFFFFF; font-weight: bold; letter-spacing: 0px;")
         layout_idle.addWidget(self.lbl_clock)
 
         layout_idle.addSpacing(4)
