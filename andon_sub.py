@@ -367,17 +367,17 @@ class AndonWindow(QMainWindow):
         self.page_idle = QWidget()
         self.page_idle.setStyleSheet("background-color: black;")
         layout_idle = QVBoxLayout(self.page_idle)
-        layout_idle.setContentsMargins(40, 15, 40, 12)
+        layout_idle.setContentsMargins(40, 6, 40, 6)
         layout_idle.setSpacing(0)
 
         # --- 1. 上部: 大型デジタル時計 ---
         self.lbl_clock = QLabel()
         self.lbl_clock.setAlignment(Qt.AlignCenter)
-        self.lbl_clock.setFont(QFont("Arial", 125, QFont.Bold))
+        self.lbl_clock.setFont(QFont("Arial", 160, QFont.Bold))
         self.lbl_clock.setStyleSheet("color: #FFFFFF; font-weight: bold; letter-spacing: 4px;")
         layout_idle.addWidget(self.lbl_clock)
 
-        layout_idle.addSpacing(10)
+        layout_idle.addSpacing(6)
 
         line1 = QFrame()
         line1.setFrameShape(QFrame.HLine)
@@ -385,33 +385,33 @@ class AndonWindow(QMainWindow):
         line1.setStyleSheet("border: 1px solid #263238;")
         layout_idle.addWidget(line1)
 
-        layout_idle.addSpacing(10)
+        layout_idle.addSpacing(6)
 
         # --- 2. 中央: 安全第一マーク ＆ スローガン ---
         self.lbl_safety_badge = QLabel("✚  安 全 第 一  ✚")
         self.lbl_safety_badge.setAlignment(Qt.AlignCenter)
-        self.lbl_safety_badge.setFont(QFont("Arial", 32, QFont.Bold))
+        self.lbl_safety_badge.setFont(QFont("Arial", 30, QFont.Bold))
         self.lbl_safety_badge.setStyleSheet("color: #00E676; letter-spacing: 6px;")
         layout_idle.addWidget(self.lbl_safety_badge)
 
-        layout_idle.addSpacing(8)
+        layout_idle.addSpacing(4)
 
         self.lbl_slogan_month = QLabel()
         self.lbl_slogan_month.setAlignment(Qt.AlignCenter)
-        self.lbl_slogan_month.setFont(QFont("Arial", 26, QFont.Bold))
+        self.lbl_slogan_month.setFont(QFont("Arial", 25, QFont.Bold))
         self.lbl_slogan_month.setStyleSheet("color: #FFD54F; letter-spacing: 2px;")
         layout_idle.addWidget(self.lbl_slogan_month)
 
-        layout_idle.addSpacing(6)
+        layout_idle.addSpacing(4)
 
         self.lbl_slogan_day = QLabel()
         self.lbl_slogan_day.setAlignment(Qt.AlignCenter)
-        self.lbl_slogan_day.setFont(QFont("Arial", 26, QFont.Bold))
+        self.lbl_slogan_day.setFont(QFont("Arial", 25, QFont.Bold))
         self.lbl_slogan_day.setStyleSheet("color: #FFD54F; letter-spacing: 2px;")
         layout_idle.addWidget(self.lbl_slogan_day)
 
-        # --- 2.5 履歴表示エリア（安全標語の下に左右2列で最新3件を表示：1.5倍フォント28px） ---
-        layout_idle.addSpacing(10)
+        # --- 2.5 履歴表示エリア（安全標語の下に左右2列で最新3件を表示：フォント27px、下部へ2行分移動） ---
+        layout_idle.addSpacing(6)
 
         line_hist = QFrame()
         line_hist.setFrameShape(QFrame.HLine)
@@ -419,24 +419,24 @@ class AndonWindow(QMainWindow):
         line_hist.setStyleSheet("border: 1px solid #1c252a;")
         layout_idle.addWidget(line_hist)
 
-        layout_idle.addSpacing(8)
+        layout_idle.addSpacing(6)
 
         hist_box = QHBoxLayout()
-        hist_box.setContentsMargins(50, 0, 50, 0)
-        hist_box.setSpacing(40)
+        hist_box.setContentsMargins(30, 0, 30, 0)
+        hist_box.setSpacing(24)
 
-        # 左側: 呼出履歴 (フォントサイズ1.5倍: 28px)
+        # 左側: 呼出履歴 (フォントサイズ27px)
         box_call_hist = QVBoxLayout()
-        box_call_hist.setSpacing(6)
+        box_call_hist.setSpacing(2)
         lbl_call_header = QLabel("【 呼出履歴 (最新3件) 】")
-        lbl_call_header.setFont(QFont("Arial", 28, QFont.Bold))
+        lbl_call_header.setFont(QFont("Arial", 27, QFont.Bold))
         lbl_call_header.setStyleSheet("color: #FFFFFF;")
         box_call_hist.addWidget(lbl_call_header)
 
         self.lbl_call_history = []
         for _ in range(3):
             lbl = QLabel("•  --")
-            lbl.setFont(QFont("Arial", 28, QFont.Bold))
+            lbl.setFont(QFont("Arial", 27, QFont.Bold))
             lbl.setStyleSheet("color: #616161;")
             box_call_hist.addWidget(lbl)
             self.lbl_call_history.append(lbl)
@@ -449,25 +449,26 @@ class AndonWindow(QMainWindow):
         line_v.setStyleSheet("border: 1px solid #263238;")
         hist_box.addWidget(line_v)
 
-        # 右側: 作業終了履歴 (フォントサイズ1.5倍: 28px)
+        # 右側: 作業終了履歴 (フォントサイズ27px)
         box_finish_hist = QVBoxLayout()
-        box_finish_hist.setSpacing(6)
+        box_finish_hist.setSpacing(2)
         lbl_finish_header = QLabel("【 作業終了履歴 (最新3件) 】")
-        lbl_finish_header.setFont(QFont("Arial", 28, QFont.Bold))
+        lbl_finish_header.setFont(QFont("Arial", 27, QFont.Bold))
         lbl_finish_header.setStyleSheet("color: #FFEA00;")
         box_finish_hist.addWidget(lbl_finish_header)
 
         self.lbl_finish_history = []
         for _ in range(3):
             lbl = QLabel("•  --")
-            lbl.setFont(QFont("Arial", 28, QFont.Bold))
+            lbl.setFont(QFont("Arial", 27, QFont.Bold))
             lbl.setStyleSheet("color: #616161;")
             box_finish_hist.addWidget(lbl)
             self.lbl_finish_history.append(lbl)
         hist_box.addLayout(box_finish_hist, 1)
 
         layout_idle.addLayout(hist_box)
-        layout_idle.addStretch(1)
+
+        layout_idle.addSpacing(8)
 
         line2 = QFrame()
         line2.setFrameShape(QFrame.HLine)
@@ -475,7 +476,7 @@ class AndonWindow(QMainWindow):
         line2.setStyleSheet("border: 1px solid #263238;")
         layout_idle.addWidget(line2)
 
-        layout_idle.addSpacing(10)
+        layout_idle.addSpacing(6)
 
         # --- 3. 下部: 年月日表示 ＆ 親機同期状態 ---
         status_box = QHBoxLayout()
