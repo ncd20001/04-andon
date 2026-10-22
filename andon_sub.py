@@ -303,6 +303,8 @@ class AndonWindow(QMainWindow):
 
         self.active_calls = {}
         self.finished_timers = {}
+        self.call_history = []     # 呼出履歴（最新3件）
+        self.finish_history = []   # 作業終了履歴（最新3件）
         self.machine_mapping = {}
         self.slogan_index = 0
         self.last_sync_timestamp = None
@@ -368,14 +370,14 @@ class AndonWindow(QMainWindow):
         layout_idle.setContentsMargins(40, 30, 40, 20)
         layout_idle.setSpacing(0)
 
-        # --- 1. 上部: 大型デジタル時計 (フォントサイズ1.5倍: 130 -> 195) ---
+        # --- 1. 上部: 大型デジタル時計 ---
         self.lbl_clock = QLabel()
         self.lbl_clock.setAlignment(Qt.AlignCenter)
-        self.lbl_clock.setFont(QFont("Arial", 195, QFont.Bold))
+        self.lbl_clock.setFont(QFont("Arial", 175, QFont.Bold))
         self.lbl_clock.setStyleSheet("color: #FFFFFF; font-weight: bold; letter-spacing: 4px;")
         layout_idle.addWidget(self.lbl_clock)
 
-        layout_idle.addSpacing(25)
+        layout_idle.addSpacing(15)
 
         line1 = QFrame()
         line1.setFrameShape(QFrame.HLine)
@@ -383,31 +385,88 @@ class AndonWindow(QMainWindow):
         line1.setStyleSheet("border: 1px solid #263238;")
         layout_idle.addWidget(line1)
 
-        layout_idle.addSpacing(25)
+        layout_idle.addSpacing(15)
 
         # --- 2. 中央: 安全第一マーク ＆ スローガン ---
         self.lbl_safety_badge = QLabel("✚  安 全 第 一  ✚")
         self.lbl_safety_badge.setAlignment(Qt.AlignCenter)
-        self.lbl_safety_badge.setFont(QFont("Arial", 46, QFont.Bold))
+        self.lbl_safety_badge.setFont(QFont("Arial", 40, QFont.Bold))
         self.lbl_safety_badge.setStyleSheet("color: #00E676; letter-spacing: 6px;")
         layout_idle.addWidget(self.lbl_safety_badge)
 
-        layout_idle.addSpacing(15)
+        layout_idle.addSpacing(10)
 
         self.lbl_slogan_month = QLabel()
         self.lbl_slogan_month.setAlignment(Qt.AlignCenter)
-        self.lbl_slogan_month.setFont(QFont("Arial", 36, QFont.Bold))
+        self.lbl_slogan_month.setFont(QFont("Arial", 32, QFont.Bold))
         self.lbl_slogan_month.setStyleSheet("color: #FFD54F; letter-spacing: 2px;")
         layout_idle.addWidget(self.lbl_slogan_month)
 
-        layout_idle.addSpacing(12)
+        layout_idle.addSpacing(8)
 
         self.lbl_slogan_day = QLabel()
         self.lbl_slogan_day.setAlignment(Qt.AlignCenter)
-        self.lbl_slogan_day.setFont(QFont("Arial", 36, QFont.Bold))
+        self.lbl_slogan_day.setFont(QFont("Arial", 32, QFont.Bold))
         self.lbl_slogan_day.setStyleSheet("color: #FFD54F; letter-spacing: 2px;")
         layout_idle.addWidget(self.lbl_slogan_day)
 
+        # --- 2.5 履歴表示エリア（安全標語の下に左右2列で最新3件を表示） ---
+        layout_idle.addSpacing(12)
+
+        line_hist = QFrame()
+        line_hist.setFrameShape(QFrame.HLine)
+        line_hist.setFrameShadow(QFrame.Sunken)
+        line_hist.setStyleSheet("border: 1px solid #1c252a;")
+        layout_idle.addWidget(line_hist)
+
+        layout_idle.addSpacing(8)
+
+        hist_box = QHBoxLayout()
+        hist_box.setContentsMargins(60, 0, 60, 0)
+        hist_box.setSpacing(40)
+
+        # 左側: 呼出履歴
+        box_call_hist = QVBoxLayout()
+        lbl_call_header = QLabel("【 呼出履歴 (最新3件) 】")
+        lbl_call_header.setFont(QFont("Arial", 20, QFont.Bold))
+        lbl_call_header.setStyleSheet("color: #FFFFFF;")
+        box_call_hist.addWidget(lbl_call_header)
+        box_call_hist.addSpacing(4)
+
+        self.lbl_call_history = []
+        for _ in range(3):
+            lbl = QLabel("•  --")
+            lbl.setFont(QFont("Arial", 19, QFont.Bold))
+            lbl.setStyleSheet("color: #616161;")
+            box_call_hist.addWidget(lbl)
+            self.lbl_call_history.append(lbl)
+        hist_box.addLayout(box_call_hist, 1)
+
+        # 縦の区切り線
+        line_v = QFrame()
+        line_v.setFrameShape(QFrame.VLine)
+        line_v.setFrameShadow(QFrame.Sunken)
+        line_v.setStyleSheet("border: 1px solid #263238;")
+        hist_box.addWidget(line_v)
+
+        # 右側: 作業終了履歴
+        box_finish_hist = QVBoxLayout()
+        lbl_finish_header = QLabel("【 作業終了履歴 (最新3件) 】")
+        lbl_finish_header.setFont(QFont("Arial", 20, QFont.Bold))
+        lbl_finish_header.setStyleSheet("color: #FFEA00;")
+        box_finish_hist.addWidget(lbl_finish_header)
+        box_finish_hist.addSpacing(4)
+
+        self.lbl_finish_history = []
+        for _ in range(3):
+            lbl = QLabel("•  --")
+            lbl.setFont(QFont("Arial", 19, QFont.Bold))
+            lbl.setStyleSheet("color: #616161;")
+            box_finish_hist.addWidget(lbl)
+            self.lbl_finish_history.append(lbl)
+        hist_box.addLayout(box_finish_hist, 1)
+
+        layout_idle.addLayout(hist_box)
         layout_idle.addStretch(1)
 
         line2 = QFrame()
@@ -565,8 +624,22 @@ class AndonWindow(QMainWindow):
 
             if status == 'calling':
                 self.active_calls[machine_id] = 'calling'
+                now_time = datetime.now().strftime("%H:%M")
+                display_text = self._format_machine_id(machine_id)
+                item_str = f"{now_time}  呼出：{display_text}"
+                if not self.call_history or self.call_history[0] != item_str:
+                    self.call_history.insert(0, item_str)
+                    self.call_history = self.call_history[:3]
+                    self.update_history_display()
             elif status == 'finished':
                 self.active_calls[machine_id] = 'finished'
+                now_time = datetime.now().strftime("%H:%M")
+                display_text = self._format_machine_id(machine_id)
+                item_str = f"{now_time}  終了：{display_text}"
+                if not self.finish_history or self.finish_history[0] != item_str:
+                    self.finish_history.insert(0, item_str)
+                    self.finish_history = self.finish_history[:3]
+                    self.update_history_display()
             elif status == 'normal':
                 if machine_id in self.active_calls:
                     del self.active_calls[machine_id]
@@ -629,7 +702,27 @@ class AndonWindow(QMainWindow):
             self.update_display()
             if not self.active_calls:
                 self.update_clock()
+                self.update_history_display()
                 self.stack_layout.setCurrentWidget(self.page_idle)
+
+    def update_history_display(self):
+        """待機画面の呼出履歴・作業終了履歴（最新3件）を更新"""
+        if not hasattr(self, 'lbl_call_history'): return
+        for i, lbl in enumerate(self.lbl_call_history):
+            if i < len(self.call_history):
+                lbl.setText(f"•  {self.call_history[i]}")
+                lbl.setStyleSheet("color: #E0E0E0;")
+            else:
+                lbl.setText("•  --")
+                lbl.setStyleSheet("color: #616161;")
+
+        for i, lbl in enumerate(self.lbl_finish_history):
+            if i < len(self.finish_history):
+                lbl.setText(f"•  {self.finish_history[i]}")
+                lbl.setStyleSheet("color: #FFEE58;")
+            else:
+                lbl.setText("•  --")
+                lbl.setStyleSheet("color: #616161;")
 
     def handle_sync_request(self, data):
         """親機から信号を受信 (個別更新または全状態同期)"""
@@ -637,6 +730,11 @@ class AndonWindow(QMainWindow):
         msg_type = data.get('type')
         if msg_type == 'full_sync':
             new_calls = data.get('active_calls', {})
+            if 'call_history' in data:
+                self.call_history = data['call_history']
+            if 'finish_history' in data:
+                self.finish_history = data['finish_history']
+            self.update_history_display()
             if self.active_calls != new_calls:
                 t0 = time.perf_counter()
                 logging.info(f"[Sync] Full sync update: {new_calls} (prev: {self.active_calls})")
