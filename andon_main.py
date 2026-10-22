@@ -945,9 +945,9 @@ class AndonWindow(QMainWindow):
     def _add_list_item(self, list_widget, prefix_text, number_text, color, p_size, n_size, user_data=None):
         widget = QWidget()
         layout = QHBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setContentsMargins(40, 0, 20, 0)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         lbl_prefix = QLabel(prefix_text)
         font_p = QFont("Arial", p_size, QFont.Bold)
@@ -965,6 +965,7 @@ class AndonWindow(QMainWindow):
         
         layout.addWidget(lbl_prefix)
         layout.addWidget(lbl_num)
+        layout.addStretch(1)
 
         item = QListWidgetItem()
         item_height = int(n_size * 1.05)
