@@ -701,29 +701,18 @@ class AndonWindow(QMainWindow):
 
         self.sync_sender = SyncSender()
 
-        # 画面保護防止タイマー
-        self.keep_awake_timer = QTimer(self)
-        self.keep_awake_timer.timeout.connect(self.wake_screen)
-        self.keep_awake_timer.start(30000)
-
         # 呼出点滅タイマー
         self.blink_timer = QTimer(self)
         self.blink_timer.timeout.connect(self.blink_tick)
         self.blink_counters = {'calling': 0, 'finished': 0}
 
         self.last_wake_time = 0
-        self.last_heavy_wake_time = 0
         self.last_pulse_time = 0
 
         # 時計更新タイマー (1秒ごと: 負荷0.01%以下)
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.update_clock)
         self.clock_timer.start(1000)
-
-        # 安全標語ローテーションタイマー (30秒ごと)
-        self.slogan_timer = QTimer(self)
-        self.slogan_timer.timeout.connect(self.rotate_slogan)
-        self.slogan_timer.start(30000)
 
         # メモリ解放タイマー (30分ごと)
         self.gc_timer = QTimer(self)
@@ -963,21 +952,15 @@ class AndonWindow(QMainWindow):
 
         if IS_RASPBERRY_PI:
             try:
-                current_pos = QCursor.pos()
-                QCursor.setPos(current_pos.x() + 1, current_pos.y())
-                QCursor.setPos(current_pos)
-
-                if current_time - self.last_heavy_wake_time > 60.0:
-                    self.last_heavy_wake_time = current_time
-                    def _async_wake_worker():
-                        try:
-                            env = os.environ.copy()
-                            if 'DISPLAY' not in env: env['DISPLAY'] = ':0'
-                            cmd = "xdg-screensaver reset; xset s off -dpms s noblank dpms force on; vcgencmd display_power 1"
-                            subprocess.run(cmd, shell=True, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-                        except Exception as e:
-                            logging.error(f"[WakeScreen] Async error: {e}")
-                    threading.Thread(target=_async_wake_worker, daemon=True).start()
+                def _async_wake_worker():
+                    try:
+                        env = os.environ.copy()
+                        if 'DISPLAY' not in env: env['DISPLAY'] = ':0'
+                        cmd = "xset s off -dpms s noblank dpms force on"
+                        subprocess.run(cmd, shell=True, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+                    except Exception as e:
+                        logging.error(f"[WakeScreen] Async error: {e}")
+                threading.Thread(target=_async_wake_worker, daemon=True).start()
             except Exception as e:
                 logging.error(f"[WakeScreen] Error: {e}")
 
